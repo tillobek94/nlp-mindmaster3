@@ -1,67 +1,42 @@
 FROM php:8.2-apache
 
-# 1. libzip muammosini hal qilish - avval kerakli package'larni o'rnatamiz
-RUN apt-get update && apt-get install -y \
-    wget \
-    libzip-dev \
-    zip \
-    unzip
+# Step 1: Update and install basic packages
+RUN apt-get update
 
-# 2. libzip ni to'g'ri versiyasini o'rnatish
-RUN apt-get install -y libzip4
+# Step 2: Install libzip dependencies (libzip5 is already installed with libzip-dev)
+RUN apt-get install -y libzip-dev zip unzip
 
-# 3. Boshqa dependencies
+# Step 3: Install other required packages
 RUN apt-get install -y \
-    git \
-    curl \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
-    libpq-dev \
     libfreetype6-dev \
     libjpeg62-turbo-dev
 
-# 4. PHP extensions - alohida qadamda
+# Step 4: Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-RUN docker-php-ext-install \
-    pdo \
-    pdo_mysql \
-    pdo_pgsql \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    zip
+RUN docker-php-ext-install pdo pdo_mysql mbstring gd zip
 
-# Composer
+# Step 5: Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Apache config - Laravel public folder uchun
-RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/!/var/www/html/public!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+# Step 6: Configure Apache for Laravel
+COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
+RUN a2enmod rewrite
 
-# ServerName
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
-
+# Step 7: Set working directory and copy files
 WORKDIR /var/www/html
 COPY . .
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-scripts
+# Step 8: Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader
 
-# Laravel key generate
+# Step 9: Generate Laravel key
 RUN php artisan key:generate --force
 
-# Cache clear
-RUN php artisan config:clear
-
-# Permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 storage bootstrap/cache
-
-# Enable Apache modules
-RUN a2enmod rewrite
+# Step 10: Set permissions
+RUN chmod -R 775 storage bootstrap/cache
 
 EXPOSE 80
 CMD ["apache2-foreground"]
